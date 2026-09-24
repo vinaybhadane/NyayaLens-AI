@@ -27,7 +27,7 @@ If you prefer manual setup without blueprints:
    - **Region**: Any (e.g., Oregon, Frankfurt, Singapore)
    - **Branch**: `main`
    - **Runtime**: `Node`
-   - **Build Command**: `npm install && npm run build`
+   - **Build Command**: `npm install --include=dev && npm run build`
    - **Start Command**: `npm start`
    - **Instance Type**: `Free`
 4. Under **"Environment Variables"**, add:
