@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ClauseAnalysis } from '../../lib/schemas/clause.ts';
 import { RiskHeatStrip } from './RiskHeatStrip.tsx';
 import { CLAUSE_TYPE_LABELS } from '../../config/index.ts';
@@ -19,15 +19,25 @@ export const ClauseRadar: React.FC<ClauseRadarProps> = ({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [expandedClauseId, setExpandedClauseId] = useState<string | null>(null);
 
-  const filteredClauses = clauses.filter((c) => {
-    const matchesRisk = riskFilter === 'all' || c.risk === riskFilter;
-    const matchesType = typeFilter === 'all' || c.type === typeFilter;
-    return matchesRisk && matchesType;
-  });
+  const filteredClauses = useMemo(() => {
+    return clauses.filter((c) => {
+      const matchesRisk = riskFilter === 'all' || c.risk === riskFilter;
+      const matchesType = typeFilter === 'all' || c.type === typeFilter;
+      return matchesRisk && matchesType;
+    });
+  }, [clauses, riskFilter, typeFilter]);
 
-  const highCount = clauses.filter((c) => c.risk === 'high').length;
-  const medCount = clauses.filter((c) => c.risk === 'medium').length;
-  const lowCount = clauses.filter((c) => c.risk === 'low').length;
+  const { highCount, medCount, lowCount } = useMemo(() => {
+    let high = 0;
+    let med = 0;
+    let low = 0;
+    for (const c of clauses) {
+      if (c.risk === 'high') high++;
+      else if (c.risk === 'medium') med++;
+      else if (c.risk === 'low') low++;
+    }
+    return { highCount: high, medCount: med, lowCount: low };
+  }, [clauses]);
 
   return (
     <section aria-labelledby="radar-heading" className="space-y-6">

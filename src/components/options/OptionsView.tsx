@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { Lightbulb, MessageSquare, Edit3, Shield, Users } from 'lucide-react';
 
@@ -6,22 +6,27 @@ export const OptionsView: React.FC = () => {
   const { currentDocument } = useSession();
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
+  // Collect options across all clauses (memoized)
+  const allOptions = useMemo(() => {
+    if (!currentDocument) return [];
+    return currentDocument.clauses.flatMap((c) =>
+      c.options.map((opt, idx) => ({
+        id: `${c.id}-opt-${idx}`,
+        clauseId: c.id,
+        clauseTitle: c.title,
+        risk: c.risk,
+        ...opt,
+      }))
+    );
+  }, [currentDocument]);
+
+  const filteredOptions = useMemo(() => {
+    return allOptions.filter(
+      (o) => categoryFilter === 'all' || o.category === categoryFilter
+    );
+  }, [allOptions, categoryFilter]);
+
   if (!currentDocument) return null;
-
-  // Collect options across all clauses
-  const allOptions = currentDocument.clauses.flatMap((c) =>
-    c.options.map((opt, idx) => ({
-      id: `${c.id}-opt-${idx}`,
-      clauseId: c.id,
-      clauseTitle: c.title,
-      risk: c.risk,
-      ...opt,
-    }))
-  );
-
-  const filteredOptions = allOptions.filter(
-    (o) => categoryFilter === 'all' || o.category === categoryFilter
-  );
 
   const getCategoryIcon = (category: string) => {
     switch (category) {

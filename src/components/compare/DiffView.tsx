@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { apiClient } from '../../services/apiClient.ts';
 import {
@@ -14,7 +14,7 @@ export const DiffView: React.FC = () => {
   const [rightText, setRightText] = useState(REVISED_RENTAL_AGREEMENT);
   const [filterKind, setFilterKind] = useState<'all' | 'added' | 'removed' | 'modified'>('all');
 
-  const handleCompare = async () => {
+  const handleCompare = useCallback(async () => {
     setIsLoading(true);
     setStatusMessage('Aligning clauses and calculating semantic differences...');
 
@@ -34,11 +34,14 @@ export const DiffView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [leftText, rightText, setIsLoading, setStatusMessage, setCompareResult]);
 
-  const filteredChanges = compareResult?.changes.filter(
-    (c) => filterKind === 'all' || c.kind === filterKind
-  );
+  const filteredChanges = useMemo(() => {
+    if (!compareResult) return [];
+    return compareResult.changes.filter(
+      (c) => filterKind === 'all' || c.kind === filterKind
+    );
+  }, [compareResult, filterKind]);
 
   return (
     <section aria-labelledby="compare-heading" className="space-y-6">

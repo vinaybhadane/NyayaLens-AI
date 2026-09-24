@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { CheckSquare, Calendar, Filter, Clock, Copy, Check, Download, Lightbulb } from 'lucide-react';
 
@@ -8,50 +8,59 @@ export const ActionKit: React.FC = () => {
   const [partyFilter, setPartyFilter] = useState<string>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  if (!currentDocument) return null;
+  // Flatten all obligations across clauses (memoized)
+  const allObligations = useMemo(() => {
+    if (!currentDocument) return [];
+    return currentDocument.clauses.flatMap((c) =>
+      c.obligations.map((ob, idx) => ({
+        id: `${c.id}-ob-${idx}`,
+        clauseId: c.id,
+        clauseTitle: c.title,
+        ...ob,
+      }))
+    );
+  }, [currentDocument]);
 
-  // Flatten all obligations across clauses
-  const allObligations = currentDocument.clauses.flatMap((c) =>
-    c.obligations.map((ob, idx) => ({
-      id: `${c.id}-ob-${idx}`,
-      clauseId: c.id,
-      clauseTitle: c.title,
-      ...ob,
-    }))
-  );
+  // Flatten all actionable options across clauses (memoized)
+  const allActions = useMemo(() => {
+    if (!currentDocument) return [];
+    return currentDocument.clauses.flatMap((c) =>
+      (c.options || []).map((opt, idx) => ({
+        id: `${c.id}-opt-${idx}`,
+        clauseId: c.id,
+        clauseTitle: c.title,
+        ...opt,
+      }))
+    );
+  }, [currentDocument]);
 
-  // Flatten all actionable options across clauses
-  const allActions = currentDocument.clauses.flatMap((c) =>
-    (c.options || []).map((opt, idx) => ({
-      id: `${c.id}-opt-${idx}`,
-      clauseId: c.id,
-      clauseTitle: c.title,
-      ...opt,
-    }))
-  );
+  const parties = useMemo(() => {
+    return Array.from(new Set(allObligations.map((o) => o.party))).filter(Boolean);
+  }, [allObligations]);
 
-  const parties = Array.from(new Set(allObligations.map((o) => o.party))).filter(Boolean);
+  const filteredObligations = useMemo(() => {
+    return allObligations.filter(
+      (o) => partyFilter === 'all' || o.party === partyFilter
+    );
+  }, [allObligations, partyFilter]);
 
-  const filteredObligations = allObligations.filter(
-    (o) => partyFilter === 'all' || o.party === partyFilter
-  );
-
-  const toggleObligation = (id: string) => {
+  const toggleObligation = useCallback((id: string) => {
     setCompletedObligations((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
-  const handleCopyWording = (id: string, text: string) => {
+  const handleCopyWording = useCallback((id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
+  }, []);
 
-  const handleExportChecklist = () => {
+  const handleExportChecklist = useCallback(() => {
+    if (!currentDocument) return;
     const lines = [
       `NYAYALENS AI — ACTION CHECKLIST & OBLIGATIONS`,
       `Document: ${currentDocument.title}`,
@@ -86,11 +95,15 @@ export const ActionKit: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
+  }, [currentDocument, allObligations, completedObligations, allActions]);
 
-  const completionPercent = allObligations.length > 0
-    ? Math.round((completedObligations.size / allObligations.length) * 100)
-    : 0;
+  const completionPercent = useMemo(() => {
+    return allObligations.length > 0
+      ? Math.round((completedObligations.size / allObligations.length) * 100)
+      : 0;
+  }, [allObligations.length, completedObligations.size]);
+
+  if (!currentDocument) return null;
 
   return (
     <section aria-labelledby="action-kit-heading" className="space-y-6">
@@ -227,9 +240,9 @@ export const ActionKit: React.FC = () => {
             {currentDocument.timeline.length === 0 ? (
               <p className="text-xs text-slate-500 italic">No specific deadlines detected in this document.</p>
             ) : (
-              currentDocument.timeline.map((event) => (
+              currentDocument.timeline.map((event, idx) => (
                 <div
-                  key={event.id}
+                  key={event.id || `timeline-${idx}`}
                   className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs flex items-start gap-3"
                 >
                   <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">

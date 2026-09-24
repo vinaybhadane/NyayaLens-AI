@@ -239,4 +239,20 @@ describe('Parameter 2 & 4 — Integration & API Security Tests (14 tests)', () =
       process.env.NODE_ENV = prevEnv;
     }
   });
+
+  // 17. POST /api/ask supports SSE event-stream chunking
+  it('17. POST /api/ask supports text/event-stream streaming with data chunks', async () => {
+    const res = await request(app)
+      .post('/api/ask?stream=true')
+      .set('Accept', 'text/event-stream')
+      .send({
+        question: 'What is the monthly rent?',
+        documentText: SAMPLE_RENTAL_AGREEMENT,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.text).toContain('data:');
+    expect(res.text).toContain('"complete":true');
+  });
 });

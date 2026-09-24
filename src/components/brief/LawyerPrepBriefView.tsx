@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { apiClient } from '../../services/apiClient.ts';
 import { Briefcase, Download, HelpCircle, AlertTriangle, Loader2, ShieldCheck, ExternalLink } from 'lucide-react';
@@ -8,9 +8,8 @@ export const LawyerPrepBriefView: React.FC = () => {
     useSession();
   const [exporting, setExporting] = useState(false);
 
-  if (!currentDocument) return null;
-
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
+    if (!currentDocument) return;
     setIsLoading(true);
     setStatusMessage('Generating Lawyer Prep Brief with prioritized questions...');
 
@@ -28,9 +27,9 @@ export const LawyerPrepBriefView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentDocument, setIsLoading, setStatusMessage, setLawyerBrief]);
 
-  const handleExport = async (format: 'html' | 'txt') => {
+  const handleExport = useCallback(async (format: 'html' | 'txt') => {
     if (!lawyerBrief) return;
     setExporting(true);
 
@@ -54,7 +53,9 @@ export const LawyerPrepBriefView: React.FC = () => {
     } finally {
       setExporting(false);
     }
-  };
+  }, [lawyerBrief]);
+
+  if (!currentDocument) return null;
 
   return (
     <section aria-labelledby="brief-heading" className="space-y-6">
@@ -123,7 +124,7 @@ export const LawyerPrepBriefView: React.FC = () => {
             </div>
             <div>
               <span className="text-slate-500 dark:text-slate-400 block font-medium">Key Parties:</span>
-              <span className="font-bold text-slate-900 dark:text-white">{lawyerBrief.keyParties.join(' & ')}</span>
+              <span className="font-bold text-slate-900 dark:text-white">{(lawyerBrief.keyParties || []).join(' & ')}</span>
             </div>
           </div>
 
@@ -136,14 +137,14 @@ export const LawyerPrepBriefView: React.FC = () => {
           </div>
 
           {/* Ambiguities / Missing Terms */}
-          {lawyerBrief.ambiguitiesOrMissingTerms.length > 0 && (
+          {(lawyerBrief.ambiguitiesOrMissingTerms || []).length > 0 && (
             <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-xs">
               <h4 className="font-bold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-1.5 uppercase">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
                 Missing Terms or Ambiguities Flagged for Counsel
               </h4>
               <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                {lawyerBrief.ambiguitiesOrMissingTerms.map((term, i) => (
+                {(lawyerBrief.ambiguitiesOrMissingTerms || []).map((term, i) => (
                   <li key={i}>{term}</li>
                 ))}
               </ul>
@@ -158,7 +159,7 @@ export const LawyerPrepBriefView: React.FC = () => {
             </h4>
 
             <div className="space-y-3">
-              {lawyerBrief.prioritizedQuestions.map((q) => (
+              {(lawyerBrief.prioritizedQuestions || []).map((q) => (
                 <div
                   key={q.id}
                   className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs space-y-2"

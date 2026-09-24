@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { useSpeech } from '../../hooks/useSpeech.ts';
 import { apiClient } from '../../services/apiClient.ts';
@@ -17,7 +17,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ onScrollToClause }) =>
   const [loading, setLoading] = useState(false);
   const [qaAnswer, setQaAnswer] = useState<QaAnswer | null>(null);
 
-  const handleAsk = async (queryToAsk?: string) => {
+  const handleAsk = useCallback(async (queryToAsk?: string) => {
     const q = queryToAsk || question;
     if (!q.trim() || !currentDocument) return;
 
@@ -40,14 +40,14 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ onScrollToClause }) =>
     } finally {
       setLoading(false);
     }
-  };
+  }, [question, currentDocument]);
 
-  const handleCitationClick = (clauseId: string) => {
+  const handleCitationClick = useCallback((clauseId: string) => {
     setHighlightedClauseId(clauseId);
     onScrollToClause(clauseId);
-  };
+  }, [setHighlightedClauseId, onScrollToClause]);
 
-  const toggleVoice = () => {
+  const toggleVoice = useCallback(() => {
     if (isListening) {
       stopListening();
     } else {
@@ -56,7 +56,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ onScrollToClause }) =>
         handleAsk(transcript);
       });
     }
-  };
+  }, [isListening, stopListening, startListening, handleAsk]);
 
   return (
     <section aria-labelledby="qa-heading" className="space-y-6">

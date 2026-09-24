@@ -60,9 +60,9 @@ export function maskPii(text: string): PiiMaskResult {
     }
   );
 
-  // Mask Phone numbers (Indian & international formats)
+  // Mask Phone numbers (Indian 5+5, 10-digit, and international formats)
   masked = masked.replace(
-    /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3,5}\)?[-.\s]?\d{3,5}[-.\s]?\d{4}/g,
+    /(?:\+\d{1,3}[-.\s]?)?(?:\d{5}[-.\s]?\d{5}|\(?\d{3,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}|\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/g,
     (match) => {
       const placeholder = `[PHONE_${counter++}]`;
       replacements.set(placeholder, match);
