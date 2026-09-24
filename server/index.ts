@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { helmetMiddleware, corsMiddleware } from './middleware/security.ts';
@@ -23,14 +24,20 @@ const distPath = path.resolve(__dirname, '../dist');
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
-// 1. Global Security & Logging
+// 1. Global Security, Compression & Logging
 app.use(helmetMiddleware());
+app.use(compression());
 app.use(requestLogger);
 
-// 2. Serve compiled frontend in production (Single Web Service on Render)
+// 2. Serve compiled frontend in production with high-efficiency HTTP caching
 app.use(express.static(distPath, {
-  setHeaders: (res) => {
+  maxAge: '1y',
+  immutable: true,
+  setHeaders: (res, filePath) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
   },
 }));
 

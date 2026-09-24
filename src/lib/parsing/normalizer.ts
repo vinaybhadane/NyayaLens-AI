@@ -8,14 +8,21 @@
 export function normalizeText(rawText: string): string {
   if (!rawText) return '';
 
-  return rawText
+  // Strip control characters except newline and tab using fast char code scanning
+  let sanitized = '';
+  for (let i = 0; i < rawText.length; i++) {
+    const code = rawText.charCodeAt(i);
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)) {
+      sanitized += rawText[i];
+    }
+  }
+
+  return sanitized
     // Unicode normalization
     .normalize('NFKC')
     // Standardize CRLF to LF
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
-    // Strip control characters except newline and tab
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     // Remove whitespace on lines that only contain spaces or tabs
     .replace(/^[ \t]+$/gm, '')
     // Normalize excessive horizontal whitespace within lines

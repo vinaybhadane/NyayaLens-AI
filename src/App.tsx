@@ -1,15 +1,9 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Header } from './components/common/Header.tsx';
 import { LegalDisclaimerBanner } from './components/common/LegalDisclaimerBanner.tsx';
 import { LiveAnnouncer } from './components/common/LiveAnnouncer.tsx';
 import { DocumentUploader } from './components/upload/DocumentUploader.tsx';
 import { ClauseViewer } from './components/simplify/ClauseViewer.tsx';
-import { ClauseRadar } from './components/radar/ClauseRadar.tsx';
-import { DiffView } from './components/compare/DiffView.tsx';
-import { QuestionBox } from './components/qa/QuestionBox.tsx';
-import { OptionsView } from './components/options/OptionsView.tsx';
-import { ActionKit } from './components/actions/ActionKit.tsx';
-import { LawyerPrepBriefView } from './components/brief/LawyerPrepBriefView.tsx';
 import { useSession, ActiveModule } from './context/SessionContext.tsx';
 import {
   FileText,
@@ -20,6 +14,37 @@ import {
   CheckSquare,
   Briefcase,
 } from 'lucide-react';
+
+// Lazy-loaded secondary views for code-splitting and sub-second initial load performance
+const ClauseRadar = React.lazy(() =>
+  import('./components/radar/ClauseRadar.tsx').then((m) => ({ default: m.ClauseRadar }))
+);
+const DiffView = React.lazy(() =>
+  import('./components/compare/DiffView.tsx').then((m) => ({ default: m.DiffView }))
+);
+const QuestionBox = React.lazy(() =>
+  import('./components/qa/QuestionBox.tsx').then((m) => ({ default: m.QuestionBox }))
+);
+const OptionsView = React.lazy(() =>
+  import('./components/options/OptionsView.tsx').then((m) => ({ default: m.OptionsView }))
+);
+const ActionKit = React.lazy(() =>
+  import('./components/actions/ActionKit.tsx').then((m) => ({ default: m.ActionKit }))
+);
+const LawyerPrepBriefView = React.lazy(() =>
+  import('./components/brief/LawyerPrepBriefView.tsx').then((m) => ({ default: m.LawyerPrepBriefView }))
+);
+
+const ModuleFallback: React.FC = () => (
+  <div
+    role="status"
+    aria-live="polite"
+    className="p-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center flex flex-col items-center justify-center gap-3"
+  >
+    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Loading module...</span>
+  </div>
+);
 
 export const App: React.FC = () => {
   const {
@@ -92,34 +117,36 @@ export const App: React.FC = () => {
               })}
             </nav>
 
-            {/* Active Module Content */}
+            {/* Active Module Content with Suspense Code Splitting */}
             <div className="transition-all">
-              {activeModule === 'simplify' && (
-                <ClauseViewer
-                  clauses={currentDocument.clauses}
-                  highlightedClauseId={highlightedClauseId}
-                />
-              )}
+              <Suspense fallback={<ModuleFallback />}>
+                {activeModule === 'simplify' && (
+                  <ClauseViewer
+                    clauses={currentDocument.clauses}
+                    highlightedClauseId={highlightedClauseId}
+                  />
+                )}
 
-              {activeModule === 'radar' && (
-                <ClauseRadar
-                  clauses={currentDocument.clauses}
-                  onSelectClause={handleScrollToClause}
-                  selectedClauseId={highlightedClauseId}
-                />
-              )}
+                {activeModule === 'radar' && (
+                  <ClauseRadar
+                    clauses={currentDocument.clauses}
+                    onSelectClause={handleScrollToClause}
+                    selectedClauseId={highlightedClauseId}
+                  />
+                )}
 
-              {activeModule === 'compare' && <DiffView />}
+                {activeModule === 'compare' && <DiffView />}
 
-              {activeModule === 'qa' && (
-                <QuestionBox onScrollToClause={handleScrollToClause} />
-              )}
+                {activeModule === 'qa' && (
+                  <QuestionBox onScrollToClause={handleScrollToClause} />
+                )}
 
-              {activeModule === 'options' && <OptionsView />}
+                {activeModule === 'options' && <OptionsView />}
 
-              {activeModule === 'actions' && <ActionKit />}
+                {activeModule === 'actions' && <ActionKit />}
 
-              {activeModule === 'brief' && <LawyerPrepBriefView />}
+                {activeModule === 'brief' && <LawyerPrepBriefView />}
+              </Suspense>
             </div>
           </div>
         )}

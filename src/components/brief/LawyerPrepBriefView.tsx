@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSession } from '../../context/SessionContext.tsx';
 import { apiClient } from '../../services/apiClient.ts';
-import { Briefcase, Download, HelpCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Briefcase, Download, HelpCircle, AlertTriangle, Loader2, ShieldCheck, ExternalLink } from 'lucide-react';
 
 export const LawyerPrepBriefView: React.FC = () => {
   const { currentDocument, lawyerBrief, setLawyerBrief, setIsLoading, isLoading, setStatusMessage } =
@@ -187,6 +187,43 @@ export const LawyerPrepBriefView: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Statutory Free Legal Aid & NALSA Section 12 Directory */}
+          {lawyerBrief.legalAidInfo && (
+            <div className="p-5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 text-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <h4 className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2 uppercase tracking-wider text-xs">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  Statutory Free Legal Aid Directory (Section 12, LSA Act 1987)
+                </h4>
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-mono font-bold text-xs">
+                  <span>National Helpline:</span>
+                  <a href={`tel:${lawyerBrief.legalAidInfo.helpline || '15100'}`} className="underline">
+                    {lawyerBrief.legalAidInfo.helpline || '15100'}
+                  </a>
+                </div>
+              </div>
+
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
+                {lawyerBrief.legalAidInfo.eligibilityNote} If you cannot afford a private advocate, you are statutory entitled to free legal counsel and court representation through the District/State Legal Services Authority.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4 pt-1 font-medium text-emerald-800 dark:text-emerald-300">
+                <span>Authority: <strong>{lawyerBrief.legalAidInfo.organization}</strong></span>
+                {lawyerBrief.legalAidInfo.website && (
+                  <a
+                    href={lawyerBrief.legalAidInfo.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 underline hover:text-emerald-900 dark:hover:text-emerald-100"
+                  >
+                    <span>Visit Official NALSA Portal</span>
+                    <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
