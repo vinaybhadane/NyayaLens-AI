@@ -211,4 +211,32 @@ describe('Parameter 2 & 4 — Integration & API Security Tests (14 tests)', () =
 
     consoleSpy.mockRestore();
   });
+
+  // 15. Serves index.html for root path and SPA fallback
+  it('15. frontend SPA routing serves index.html with 200 OK', async () => {
+    const res = await request(app).get('/');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('<!DOCTYPE html>');
+  });
+
+  // 16. CORS on API routes allows onrender.com and does not 500 on unlisted origins
+  it('16. CORS allows onrender.com origins and omits headers gracefully without 500', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = 'production';
+      const resAllowed = await request(app)
+        .get('/api/health')
+        .set('Origin', 'https://nyayalens-ai.onrender.com');
+      expect(resAllowed.status).toBe(200);
+      expect(resAllowed.headers['access-control-allow-origin']).toBe('https://nyayalens-ai.onrender.com');
+
+      const resUnlisted = await request(app)
+        .get('/api/health')
+        .set('Origin', 'https://untrusted-attacker.com');
+      expect(resUnlisted.status).toBe(200);
+      expect(resUnlisted.headers['access-control-allow-origin']).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
 });
