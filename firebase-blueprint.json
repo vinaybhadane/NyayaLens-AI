@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "name": "nyayalens",
+    "theme": "AI for Legal Assistance & Access",
+    "auth": {
+      "providers": ["anonymous", "google", "email"]
+    },
+    "firestore": {
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json",
+      "collections": {
+        "users/{userId}/analyses": {
+          "description": "User-isolated document analysis store. Default ephemeral, explicit opt-in only.",
+          "fields": {
+            "id": "string",
+            "title": "string",
+            "ownerId": "string",
+            "createdAt": "timestamp",
+            "summary": "string",
+            "clauses": "array"
+          }
+        }
+      }
+    }
+  }
+}

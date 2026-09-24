@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny all access across database
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User-isolated document analyses (opt-in cloud sync)
+    match /users/{userId}/analyses/{analysisId} {
+      // Must be authenticated and the owner of the document
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+      // Allow create only if authenticated owner and payload satisfies shape and size caps
+      allow create: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.ownerId == userId
+        && request.resource.data.keys().hasAll(['id', 'title', 'ownerId', 'createdAt', 'summary', 'clauses'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() <= 5000
+        && request.resource.data.clauses is list
+        && request.resource.data.clauses.size() <= 200;
+
+      // Allow update only by owner with valid fields
+      allow update: if request.auth != null 
+        && request.auth.uid == userId
+        && resource.data.ownerId == userId
+        && request.resource.data.ownerId == userId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200;
+    }
+  }
+}

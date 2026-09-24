@@ -1,0 +1,215 @@
+import { getGeminiClient, getGeminiModelName } from './geminiClient.ts';
+import { MockAiProvider } from './mockProvider.ts';
+import { analysisCache } from '../cache/lruCache.ts';
+import { RawClause } from '../../src/lib/segmentation/clauseSplitter.ts';
+import { ClauseAnalysis } from '../../src/lib/schemas/clause.ts';
+import { QaAnswer } from '../../src/lib/schemas/qa.ts';
+import { LawyerBrief } from '../../src/lib/schemas/brief.ts';
+import { CompareResult } from '../../src/lib/schemas/compare.ts';
+import { verifyAllCitations } from '../../src/lib/grounding/verifier.ts';
+import {
+  GLOBAL_SYSTEM_INSTRUCTION,
+  CLAUSE_ANALYSIS_PROMPT,
+  GROUNDED_QA_PROMPT,
+  PROMPT_VERSION,
+} from './prompts.ts';
+
+const mockProvider = new MockAiProvider();
+
+/**
+ * AI Orchestrator providing server-side LLM calls with grounding verification,
+ * LRU caching, anti-prompt injection delimiters, and offline fallback.
+ */
+export class AiOrchestrator {
+  /**
+   * Analyzes document clauses in batch with caching and grounding verification.
+   */
+  public async analyzeClauses(
+    clauses: RawClause[],
+    lang = 'en'
+  ): Promise<ClauseAnalysis[]> {
+    const results: ClauseAnalysis[] = [];
+    const missingClauses: RawClause[] = [];
+
+    // 1. Check LRU cache for each clause
+    for (const clause of clauses) {
+      const cacheKey = analysisCache.generateKey(clause.text, 'analyze', PROMPT_VERSION, lang);
+      const cached = analysisCache.get<ClauseAnalysis>(cacheKey);
+      if (cached) {
+        results.push(cached);
+      } else {
+        missingClauses.push(clause);
+      }
+    }
+
+    if (missingClauses.length === 0) {
+      return results;
+    }
+
+    // 2. Process missing clauses via Gemini or Mock
+    const gemini = getGeminiClient();
+    let newAnalyses: ClauseAnalysis[] = [];
+
+    if (gemini && process.env.NODE_ENV !== 'test') {
+      try {
+        newAnalyses = await this.callGeminiForClauses(gemini, missingClauses, lang);
+      } catch {
+        newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
+      }
+    } else {
+      newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
+    }
+
+    // 3. Grounding Verification and Cache Storage
+    for (const analysis of newAnalyses) {
+      const grounding = verifyAllCitations(analysis.spans, analysis.original);
+      analysis.verified = grounding.isGrounded;
+
+      const cacheKey = analysisCache.generateKey(analysis.original, 'analyze', PROMPT_VERSION, lang);
+      analysisCache.set(cacheKey, analysis);
+      results.push(analysis);
+    }
+
+    return results;
+  }
+
+  /**
+   * Performs Grounded Q&A with strict verification and abstention.
+   */
+  public async answerQuestion(
+    question: string,
+    documentText: string,
+    clauses: RawClause[] = []
+  ): Promise<QaAnswer> {
+    const cacheKey = analysisCache.generateKey(
+      `${question}:::${documentText.slice(0, 500)}`,
+      'qa',
+      PROMPT_VERSION
+    );
+    const cached = analysisCache.get<QaAnswer>(cacheKey);
+    if (cached) return cached;
+
+    const gemini = getGeminiClient();
+    let answer: QaAnswer;
+
+    if (gemini && process.env.NODE_ENV !== 'test') {
+      try {
+        answer = await this.callGeminiForQa(gemini, question, documentText);
+      } catch {
+        answer = await mockProvider.answerQuestion(question, documentText, clauses);
+      }
+    } else {
+      answer = await mockProvider.answerQuestion(question, documentText, clauses);
+    }
+
+    // Grounding verification
+    if (answer.citations.length > 0) {
+      const report = verifyAllCitations(answer.citations, documentText);
+      answer.citations = report.verifiedSpans;
+      if (!report.isGrounded) {
+        answer.confidence = 'low';
+      }
+    }
+
+    analysisCache.set(cacheKey, answer);
+    return answer;
+  }
+
+  /**
+   * Generates Lawyer Prep Brief.
+   */
+  public async generateBrief(
+    documentTitle: string,
+    documentText: string,
+    clauses: RawClause[] = []
+  ): Promise<LawyerBrief> {
+    const cacheKey = analysisCache.generateKey(
+      `${documentTitle}:::${documentText.slice(0, 500)}`,
+      'brief',
+      PROMPT_VERSION
+    );
+    const cached = analysisCache.get<LawyerBrief>(cacheKey);
+    if (cached) return cached;
+
+    const brief = await mockProvider.generateBrief(documentTitle, documentText, clauses);
+    analysisCache.set(cacheKey, brief);
+    return brief;
+  }
+
+  /**
+   * Compares two documents.
+   */
+  public async compareDocuments(
+    leftText: string,
+    rightText: string,
+    alignedChanges: CompareResult['changes']
+  ): Promise<CompareResult> {
+    return mockProvider.compareDocuments(leftText, rightText, alignedChanges);
+  }
+
+  /**
+   * Private helper to invoke Gemini API for clause analysis.
+   */
+  private async callGeminiForClauses(
+    gemini: ReturnType<typeof getGeminiClient> & {},
+    clauses: RawClause[],
+    _lang: string
+  ): Promise<ClauseAnalysis[]> {
+    const primaryModel = getGeminiModelName();
+    const clausesPayload = clauses
+      .map((c) => `[ID: ${c.id}] Title: ${c.title}\nText: ${c.text}`)
+      .join('\n---\n');
+    const prompt = `${CLAUSE_ANALYSIS_PROMPT}\n\n<<<DOCUMENT_DATA>>>\n${clausesPayload}\n<<<DOCUMENT_DATA>>>`;
+
+    try {
+      const model = gemini.getGenerativeModel({
+        model: primaryModel,
+        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      const response = await model.generateContent(prompt);
+      return JSON.parse(response.response.text()) as ClauseAnalysis[];
+    } catch {
+      // Fallback to gemini-2.5-flash if primary (e.g. gemini-3.5-flash) experiences high demand
+      const fallback = gemini.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      const response = await fallback.generateContent(prompt);
+      return JSON.parse(response.response.text()) as ClauseAnalysis[];
+    }
+  }
+
+  /**
+   * Private helper to invoke Gemini API for Q&A.
+   */
+  private async callGeminiForQa(
+    gemini: ReturnType<typeof getGeminiClient> & {},
+    question: string,
+    documentText: string
+  ): Promise<QaAnswer> {
+    const primaryModel = getGeminiModelName();
+    const prompt = `${GROUNDED_QA_PROMPT}\n\nQuestion: "${question}"\n\n<<<DOCUMENT_DATA>>>\n${documentText}\n<<<DOCUMENT_DATA>>>`;
+
+    try {
+      const model = gemini.getGenerativeModel({
+        model: primaryModel,
+        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      const response = await model.generateContent(prompt);
+      return JSON.parse(response.response.text()) as QaAnswer;
+    } catch {
+      const fallback = gemini.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      const response = await fallback.generateContent(prompt);
+      return JSON.parse(response.response.text()) as QaAnswer;
+    }
+  }
+}
+
+export const aiOrchestrator = new AiOrchestrator();

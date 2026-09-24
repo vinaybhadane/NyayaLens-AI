@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: nyayalens-ai
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: MAX_PAGES
+        value: "50"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX_AI
+        value: "20"
+      - key: CACHE_TTL_SECONDS
+        value: "1800"
