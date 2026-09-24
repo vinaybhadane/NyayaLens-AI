@@ -36,7 +36,30 @@ For each clause:
 5. Provide actionable next steps/options ({ category: 'negotiate'|'clarify'|'seek_counsel'|'request_amendment', title, description, sampleWording }).
 6. Provide exact quote source spans from the text.
 
-Respond ONLY with a JSON array conforming to ClauseAnalysis schema.
+Respond ONLY with a JSON array conforming to this exact structure:
+[
+  {
+    "id": "clause-1",
+    "type": "payment" | "term" | "termination" | "renewal" | "liability" | "indemnity" | "confidentiality" | "ip" | "non_compete" | "dispute_resolution" | "jurisdiction" | "other",
+    "title": "Descriptive Clause Title",
+    "plain": {
+      "en": "Clear, accessible Grade 6-8 plain language explanation",
+      "hi": "सरल हिंदी में स्पष्टीकरण",
+      "mr": "सोप्या मराठीत स्पष्टीकरण"
+    },
+    "risk": "low" | "medium" | "high",
+    "riskReason": "Detailed explanation of potential pitfalls and legal risks for the signing party",
+    "obligations": [
+      { "party": "Party Name", "action": "Obligation description", "dueDate": "Optional deadline" }
+    ],
+    "options": [
+      { "category": "negotiate", "title": "Suggested action", "description": "Why and how", "sampleWording": "Recommended clause wording" }
+    ],
+    "spans": [
+      { "clauseId": "clause-1", "start": 0, "end": 40, "quote": "Exact verbatim quote from the text" }
+    ]
+  }
+]
 `.trim();
 
 /**
