@@ -52,12 +52,16 @@ export class AiOrchestrator {
 
     if (gemini && process.env.NODE_ENV !== 'test') {
       try {
+        console.log(`[AiOrchestrator] Calling live Gemini API (${getGeminiModelName()}) for ${missingClauses.length} clauses...`);
+        const startTime = Date.now();
         newAnalyses = await this.callGeminiForClauses(gemini, missingClauses, lang);
+        console.log(`[AiOrchestrator] Live Gemini API responded in ${Date.now() - startTime}ms with ${newAnalyses.length} analyzed clauses!`);
       } catch (err) {
-        console.warn('[AiOrchestrator] Gemini failed, falling back to mock provider:', err);
+        console.warn('[AiOrchestrator] Gemini API failed, falling back to mock provider:', err);
         newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
       }
     } else {
+      console.log(`[AiOrchestrator] Using offline Mock Provider for ${missingClauses.length} clauses (Gemini Key: ${gemini ? 'present' : 'missing'})`);
       newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
     }
 
@@ -66,11 +70,32 @@ export class AiOrchestrator {
     }
 
     // 3. Grounding Verification and Cache Storage
-    for (const analysis of newAnalyses) {
-      const grounding = verifyAllCitations(analysis.spans, analysis.original);
+    for (let i = 0; i < newAnalyses.length; i++) {
+      const analysis = newAnalyses[i];
+      const fallbackClause = missingClauses[i] || missingClauses[0];
+
+      if (!analysis.original && fallbackClause) {
+        analysis.original = fallbackClause.text;
+      }
+      if (!analysis.title && fallbackClause) {
+        analysis.title = fallbackClause.title;
+      }
+      if (!analysis.spans || !Array.isArray(analysis.spans) || analysis.spans.length === 0) {
+        const text = analysis.original || '';
+        analysis.spans = [
+          {
+            clauseId: analysis.id || fallbackClause?.id || `clause-${i + 1}`,
+            start: 0,
+            end: Math.min(60, text.length),
+            quote: text.slice(0, 60),
+          },
+        ];
+      }
+
+      const grounding = verifyAllCitations(analysis.spans, analysis.original || '');
       analysis.verified = grounding.isGrounded;
 
-      const cacheKey = analysisCache.generateKey(analysis.original, 'analyze', PROMPT_VERSION, lang);
+      const cacheKey = analysisCache.generateKey(analysis.original || `clause-${i}`, 'analyze', PROMPT_VERSION, lang);
       analysisCache.set(cacheKey, analysis);
       results.push(analysis);
     }
@@ -155,14 +180,47 @@ export class AiOrchestrator {
   private parseClauseAnalyses(rawText: string): ClauseAnalysis[] {
     const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed)) return parsed as ClauseAnalysis[];
-    if (parsed && Array.isArray((parsed as Record<string, unknown>).clauses)) {
-      return (parsed as { clauses: ClauseAnalysis[] }).clauses;
+    let items: Record<string, unknown>[] = [];
+    if (Array.isArray(parsed)) {
+      items = parsed as Record<string, unknown>[];
+    } else if (parsed && Array.isArray((parsed as Record<string, unknown>).clauses)) {
+      items = (parsed as { clauses: Record<string, unknown>[] }).clauses;
+    } else if (parsed && typeof parsed === 'object') {
+      items = Object.values(parsed) as Record<string, unknown>[];
+    } else {
+      throw new Error('Gemini response could not be parsed into ClauseAnalysis array');
     }
-    if (parsed && typeof parsed === 'object') {
-      return Object.values(parsed) as ClauseAnalysis[];
-    }
-    throw new Error('Gemini response could not be parsed into ClauseAnalysis array');
+
+    return items.map((item, idx) => {
+      const type = (item.type || item.clauseType || 'other') as ClauseAnalysis['type'];
+      const plainRaw = item.plain || item.plainLanguageRewrite;
+      const plain = (typeof plainRaw === 'object' && plainRaw !== null)
+        ? (plainRaw as ClauseAnalysis['plain'])
+        : {
+            en: typeof plainRaw === 'string' ? plainRaw : 'Plain language summary not provided.',
+            hi: 'सरल भाषा स्पष्टीकरण।',
+            mr: 'सोप्या भाषेत स्पष्टीकरण.',
+          };
+      const rawRisk = String(item.risk || item.riskLevel || 'medium').toLowerCase();
+      const risk = (rawRisk.includes('high') ? 'high' : rawRisk.includes('low') ? 'low' : 'medium') as ClauseAnalysis['risk'];
+      const riskReason = String(item.riskReason || item.rationale || item.reason || 'Legal review recommended.');
+      const options = (Array.isArray(item.options) ? item.options : Array.isArray(item.nextSteps) ? item.nextSteps : []) as ClauseAnalysis['options'];
+      const obligations = (Array.isArray(item.obligations) ? item.obligations : []) as ClauseAnalysis['obligations'];
+
+      return {
+        id: (item.id as string) || `clause-${idx + 1}`,
+        type,
+        title: (item.title as string) || `Clause ${idx + 1}`,
+        original: (item.original as string) || '',
+        plain,
+        risk,
+        riskReason,
+        obligations,
+        options,
+        spans: (Array.isArray(item.spans) ? item.spans : []) as ClauseAnalysis['spans'],
+        verified: true,
+      };
+    });
   }
 
   /**

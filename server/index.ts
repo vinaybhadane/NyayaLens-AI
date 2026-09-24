@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -51,13 +54,14 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// 4. Centralized Error Handler (no stack traces)
+// 6. Centralized Error Handler (no stack traces)
 app.use(errorHandler);
 
 // Only listen directly when not imported in tests
 if (process.env.NODE_ENV !== 'test') {
   app.listen(port, () => {
-    console.log(`NyayaLens AI server active on http://localhost:${port}`);
+    const aiStatus = process.env.GEMINI_API_KEY ? 'Gemini 2.5 Active' : 'Offline Mock';
+    console.log(`NyayaLens AI server active on http://localhost:${port} [AI Engine: ${aiStatus}]`);
   });
 }
 

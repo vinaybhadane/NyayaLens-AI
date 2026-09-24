@@ -95,10 +95,10 @@ export function verifyQuoteInSource(
  * @returns Grounding report with verified spans and confidence
  */
 export function verifyAllCitations(
-  spans: SourceSpan[],
+  spans: SourceSpan[] | undefined | null,
   sourceText: string
 ): GroundingReport {
-  if (spans.length === 0) {
+  if (!spans || !Array.isArray(spans) || spans.length === 0) {
     return {
       isGrounded: false,
       groundedRatio: 0,
