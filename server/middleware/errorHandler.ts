@@ -64,6 +64,7 @@ export function errorHandler(
 
   // Generic fallback without leaking internal details
   const isProd = process.env.NODE_ENV === 'production';
+  console.error('[InternalServerError]', err);
   res.status(500).json({
     ok: false,
     error: {

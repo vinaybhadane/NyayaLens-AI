@@ -53,10 +53,15 @@ export class AiOrchestrator {
     if (gemini && process.env.NODE_ENV !== 'test') {
       try {
         newAnalyses = await this.callGeminiForClauses(gemini, missingClauses, lang);
-      } catch {
+      } catch (err) {
+        console.warn('[AiOrchestrator] Gemini failed, falling back to mock provider:', err);
         newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
       }
     } else {
+      newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
+    }
+
+    if (!Array.isArray(newAnalyses) || newAnalyses.length === 0) {
       newAnalyses = await mockProvider.analyzeClauses(missingClauses, lang);
     }
 
@@ -147,69 +152,85 @@ export class AiOrchestrator {
     return mockProvider.compareDocuments(leftText, rightText, alignedChanges);
   }
 
-  /**
-   * Private helper to invoke Gemini API for clause analysis.
-   */
-  private async callGeminiForClauses(
-    gemini: ReturnType<typeof getGeminiClient> & {},
-    clauses: RawClause[],
-    _lang: string
-  ): Promise<ClauseAnalysis[]> {
-    const primaryModel = getGeminiModelName();
-    const clausesPayload = clauses
-      .map((c) => `[ID: ${c.id}] Title: ${c.title}\nText: ${c.text}`)
-      .join('\n---\n');
-    const prompt = `${CLAUSE_ANALYSIS_PROMPT}\n\n<<<DOCUMENT_DATA>>>\n${clausesPayload}\n<<<DOCUMENT_DATA>>>`;
-
-    try {
-      const model = gemini.getGenerativeModel({
-        model: primaryModel,
-        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-      const response = await model.generateContent(prompt);
-      return JSON.parse(response.response.text()) as ClauseAnalysis[];
-    } catch {
-      // Fallback to gemini-2.5-flash if primary (e.g. gemini-3.5-flash) experiences high demand
-      const fallback = gemini.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-      const response = await fallback.generateContent(prompt);
-      return JSON.parse(response.response.text()) as ClauseAnalysis[];
-    }
+function parseClauseAnalyses(rawText: string): ClauseAnalysis[] {
+  const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+  const parsed = JSON.parse(cleaned);
+  if (Array.isArray(parsed)) return parsed as ClauseAnalysis[];
+  if (parsed && Array.isArray((parsed as Record<string, unknown>).clauses)) {
+    return (parsed as { clauses: ClauseAnalysis[] }).clauses;
   }
-
-  /**
-   * Private helper to invoke Gemini API for Q&A.
-   */
-  private async callGeminiForQa(
-    gemini: ReturnType<typeof getGeminiClient> & {},
-    question: string,
-    documentText: string
-  ): Promise<QaAnswer> {
-    const primaryModel = getGeminiModelName();
-    const prompt = `${GROUNDED_QA_PROMPT}\n\nQuestion: "${question}"\n\n<<<DOCUMENT_DATA>>>\n${documentText}\n<<<DOCUMENT_DATA>>>`;
-
-    try {
-      const model = gemini.getGenerativeModel({
-        model: primaryModel,
-        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-      const response = await model.generateContent(prompt);
-      return JSON.parse(response.response.text()) as QaAnswer;
-    } catch {
-      const fallback = gemini.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-      const response = await fallback.generateContent(prompt);
-      return JSON.parse(response.response.text()) as QaAnswer;
-    }
+  if (parsed && typeof parsed === 'object') {
+    return Object.values(parsed) as ClauseAnalysis[];
   }
+  throw new Error('Gemini response could not be parsed into ClauseAnalysis array');
+}
+
+/**
+ * Private helper to invoke Gemini API for clause analysis.
+ */
+private async callGeminiForClauses(
+  gemini: ReturnType<typeof getGeminiClient> & {},
+  clauses: RawClause[],
+  _lang: string
+): Promise<ClauseAnalysis[]> {
+  const primaryModel = getGeminiModelName();
+  const clausesPayload = clauses
+    .map((c) => `[ID: ${c.id}] Title: ${c.title}\nText: ${c.text}`)
+    .join('\n---\n');
+  const prompt = `${CLAUSE_ANALYSIS_PROMPT}\n\n<<<DOCUMENT_DATA>>>\n${clausesPayload}\n<<<DOCUMENT_DATA>>>`;
+
+  try {
+    const model = gemini.getGenerativeModel({
+      model: primaryModel,
+      systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const response = await model.generateContent(prompt);
+    return parseClauseAnalyses(response.response.text());
+  } catch (primaryErr) {
+    console.warn(`[AiOrchestrator] Model ${primaryModel} failed, trying gemini-1.5-flash fallback:`, primaryErr);
+    const fallback = gemini.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const response = await fallback.generateContent(prompt);
+    return parseClauseAnalyses(response.response.text());
+  }
+}
+
+/**
+ * Private helper to invoke Gemini API for Q&A.
+ */
+private async callGeminiForQa(
+  gemini: ReturnType<typeof getGeminiClient> & {},
+  question: string,
+  documentText: string
+): Promise<QaAnswer> {
+  const primaryModel = getGeminiModelName();
+  const prompt = `${GROUNDED_QA_PROMPT}\n\nQuestion: "${question}"\n\n<<<DOCUMENT_DATA>>>\n${documentText}\n<<<DOCUMENT_DATA>>>`;
+
+  try {
+    const model = gemini.getGenerativeModel({
+      model: primaryModel,
+      systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const response = await model.generateContent(prompt);
+    const cleaned = response.response.text().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+    return JSON.parse(cleaned) as QaAnswer;
+  } catch (primaryErr) {
+    console.warn(`[AiOrchestrator] Model ${primaryModel} failed for QA, trying gemini-1.5-flash fallback:`, primaryErr);
+    const fallback = gemini.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const response = await fallback.generateContent(prompt);
+    const cleaned = response.response.text().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+    return JSON.parse(cleaned) as QaAnswer;
+  }
+}
 }
 
 export const aiOrchestrator = new AiOrchestrator();
