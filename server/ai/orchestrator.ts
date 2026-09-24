@@ -188,9 +188,9 @@ export class AiOrchestrator {
       const response = await model.generateContent(prompt);
       return this.parseClauseAnalyses(response.response.text());
     } catch (primaryErr) {
-      console.warn(`[AiOrchestrator] Model ${primaryModel} failed, trying gemini-1.5-flash fallback:`, primaryErr);
+      console.warn(`[AiOrchestrator] Model ${primaryModel} failed, trying gemini-2.5-pro fallback:`, primaryErr);
       const fallback = gemini.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-pro',
         systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
         generationConfig: { responseMimeType: 'application/json' },
       });
@@ -220,9 +220,9 @@ export class AiOrchestrator {
       const cleaned = response.response.text().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       return JSON.parse(cleaned) as QaAnswer;
     } catch (primaryErr) {
-      console.warn(`[AiOrchestrator] Model ${primaryModel} failed for QA, trying gemini-1.5-flash fallback:`, primaryErr);
+      console.warn(`[AiOrchestrator] Model ${primaryModel} failed for QA, trying gemini-2.5-pro fallback:`, primaryErr);
       const fallback = gemini.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-pro',
         systemInstruction: GLOBAL_SYSTEM_INSTRUCTION,
         generationConfig: { responseMimeType: 'application/json' },
       });

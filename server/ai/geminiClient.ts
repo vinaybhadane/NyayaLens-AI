@@ -23,5 +23,5 @@ export function getGeminiClient(): GoogleGenerativeAI | null {
  * Gets configured Gemini model name.
  */
 export function getGeminiModelName(): string {
-  return process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 }
